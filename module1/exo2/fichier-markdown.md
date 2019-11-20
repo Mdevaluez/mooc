@@ -8,19 +8,19 @@ Une phrase sans rien
 
 <https://www.fun-mooc.fr/>
 
-$\sum_{i=1}^n X_i$
+`$\sum_{i=1}^n X_i$` 
 
 ## Sous-partie 2 : listes
 
-### liste à puce
+**liste à puce**
 
-- item
- - sous-item
- - sous-item
+* item
+ + sous-item
+ + sous-item
 - item
 - item
 
-### liste numérotée
+**liste numérotée**
 
 1. item
 2. item
