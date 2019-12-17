@@ -1,0 +1,157 @@
+---
+title: "analyse_cholera"
+author: "Rémi_Lafitte"
+date: "17/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+data_url = "https://raw.githubusercontent.com/vincentarelbundock/Rdatasets/master/csv/HistData/Wheat.csv"
+```
+
+
+### Téléchargement
+=================================
+```{r}
+data = read.csv(data_url)
+```
+
+```{r}
+head(data)
+tail(data)
+```
+### Donnéees manquantes
+=================================
+```{r}
+na_records = apply(data, 1, function (x) any(is.na(x)))
+data[na_records,]
+```
+
+Les données des années 1815, 1820, et 1821 sont manquantes pour le salaire.
+On enlève ces données manquantes
+
+```{r}
+data <- na.omit(data)
+data[na_records,]
+```
+
+
+
+###  Mission 1 : reproduire le graphique de Playfair
+=================================
+
+# ------------------------------------
+# Playfair's graph, largely reproduced
+# ------------------------------------
+
+```{r}
+Wheat<-data 
+```
+
+
+convenience function to fill area under a curve down to a minimum value
+
+```{r}
+fillpoly <- function(x,y, low=min(y),  ...) {
+    n <- length(x)
+    polygon( c(x, x[n], x[1]), c(y, low, low), ...)
+}
+```
+
+
+
+For best results, this graph should be viewed with width ~ 2 * height
+Note use of type='s' to plot a step function for Wheat
+and panel.first to provide a background grid()
+The curve for Wages is plotted after the polygon below it is filled
+
+```{r}
+with(Wheat, {
+    plot(Year, Wheat, type="s", ylim=c(0,105), 
+        ylab="Price of the Quarter of Wheat (shillings)", 
+        panel.first=grid(col=gray(.9), lty=1))
+    fillpoly(Year, Wages, low=0, col="lightskyblue", border=NA)
+    lines(Year, Wages, lwd=3, col="red")
+    })
+
+# add some annotations
+text(1625,10, "Weekly wages of a good mechanic", cex=0.8, srt=3, col="red")
+
+# cartouche
+text(1650, 85, "Chart", cex=2, font=2)
+text(1650, 70, 
+	paste("Shewing at One View", 
+        "The Price of the Quarter of Wheat", 
+        "& Wages of Labor by the Week", 
+        "from the Year 1565 to 1821",
+        "by William Playfair",
+        sep="\n"), font=3)
+```
+
+
+
+
+
+### Mission 2 : Améliorer le graphique de Playfair
+=====================================================
+Pour commencer, Playfair a combiné les deux quantités dans un même graphique en simplifiant les unités "shillings par quart de boisseau de blé" (Wheat) et "shillings par semaine" (Wages) à un simple "shillings", ce qui aujourd'hui n'est plus admissible. On a donc deux unités différentes. 
+
+
+Une unité plus appropriée est le rapport entre le salaire et le prix du blé. 
+
+```{r}
+Wheat2<-
+Wheat %>% 
+  group_by(Year) %>% 
+  dplyr::mutate(Ratio = Wages/Wheat) 
+
+```
+
+
+Nous faisons une représentation graphique du ratio salaire/prix du blé en fonction de l'année.
+
+```{r}
+
+library(ggplot2)
+ggplot(Wheat2, aes(x = Year,  y = Ratio))+
+  geom_line() +
+  labs(x = "Year", y = "Ratio Wages/Wheat", title = "Evolution of the purchase power between 1565 and 1810")
+
+
+```
+
+On observe alors que quand les ouvriers pouvaient acheter plus de blé avec leur salaire au fil du temps.
+
+
+On peut aussi représenter les données de façon dynamique avec le package [gganimate](https://github.com/thomasp85/gganimate). 
+```{r}
+library(ggplot2)
+library(gganimate)
+
+p <- ggplot(
+  Wheat2,
+  aes(Wages, Wheat)
+  ) +
+  geom_line(size = 1.5, colour = 'steelblue') +
+  scale_color_viridis_d() +
+  labs(x = "Wheat", y = "Wages")
+
+ p + transition_reveal(Year)
+  
+```
+
+Enfin, on peut regarder la relation entre les prix et les salaires sans prendre en compte l'année.
+
+```{r}
+ ggplot(
+  Wheat2,
+  aes(Wages, Wheat)
+  ) +
+  geom_point()
+```
+

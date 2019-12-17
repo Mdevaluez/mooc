@@ -1,0 +1,130 @@
+
+---
+title: "Risk Analysis of the Space Shuttle: Pre-Challenger Prediction of Failure"
+author: "RL"
+date: "06/12"
+output: html_document
+---
+
+In this document we reperform some of the analysis provided in 
+*Risk Analysis of the Space Shuttle: Pre-Challenger Prediction of Failure* by *Siddhartha R. Dalal, Edward B. Fowlkes, Bruce Hoadley* published in *Journal of the American Statistical Association*, Vol. 84, No. 408 (Dec., 1989), pp. 945-957 and available at http://www.jstor.org/stable/2290069. 
+
+On the fourth page of this article, they indicate that the maximum likelihood estimates of the logistic regression using only temperature are: $\hat{\alpha}=5.085$ and $\hat{\beta}=-0.1156$ and their asymptotic standard errors are $s_{\hat{\alpha}}=3.052$ and $s_{\hat{\beta}}=0.047$. The Goodness of fit indicated for this model was $G^2=18.086$ with 21 degrees of freedom. Our goal is to reproduce the computation behind these values and the Figure 4 of this article, possibly in a nicer looking way.
+
+# Technical information on the computer on which the analysis is run
+We will be using the R language using the ggplot2 library.
+```{r}
+library(ggplot2)
+sessionInfo()
+```
+
+Here are the available libraries
+```{r}
+devtools::session_info()
+```
+
+
+# Loading and inspecting data
+Let's start by reading data:
+```{r}
+data = read.csv("https://app-learninglab.inria.fr/gitlab/moocrr-session1/moocrr-reproducibility-study/raw/master/data/shuttle.csv",header=T)
+data
+```
+
+We know from our previous experience on this data set that filtering data is a really bad idea. We will therefore process it as such.
+
+Let's visually inspect how temperature affects malfunction:
+```{r}
+plot(data=data, Malfunction/Count ~ Temperature, ylim=c(0,1))
+```
+
+# Logistic regression
+
+Let's assume O-rings independently fail with the same probability which solely depends on temperature. A logistic regression should allow us to estimate the influence of temperature.
+
+```{r}
+logistic_reg = glm(data=data, Malfunction/Count ~ Temperature, weights=Count, 
+                   family=binomial(link='logit'))
+summary(logistic_reg)
+```
+
+The maximum likelyhood estimator of the intercept and of Temperature are thus $\hat{\alpha}=5.0849$ and $\hat{\beta}=-0.1156$ and their standard errors are $s_{\hat{\alpha}} = 3.052$ and $s_{\hat{\beta}} = 0.04702$. The Residual deviance corresponds to the Goodness of fit $G^2=18.086$ with 21 degrees of freedom. **I have therefore managed to replicate the results of the Dalal *et al.* article**.
+
+# Predicting failure probability
+The temperature when launching the shuttle was 31°F. Let's try to 
+estimate the failure probability for such temperature using our model.:
+```{r}
+# shuttle=shuttle[shuttle$r!=0,] 
+tempv = seq(from=30, to=90, by = .5)
+rmv <- predict(logistic_reg,list(Temperature=tempv),type="response")
+plot(tempv,rmv,type="l",ylim=c(0,1))
+points(data=data, Malfunction/Count ~ Temperature)
+```
+
+This figure is very similar to the Figure 4 of Dalal et al. **I have managed to replicate the Figure 4 of the Dalal *et al.* article.**
+
+# Confidence on the prediction
+Let's try to plot confidence intervals with ggplot2.
+```{r, fig.height=3.3}
+ggplot(data, aes(y=Malfunction/Count, x=Temperature)) + geom_point(alpha=.2, size = 2, color="blue") + 
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), fullrange=T) +
+  xlim(30,90) + ylim(0,1) + theme_bw()
+```
+
+Mmmh, I have a warning from ggplot2 indicating *"non-integer #successes in a binomial glm!"*. This seems fishy. Furthermore, this confidence region seems huge... It seems strange to me that the uncertainty grows so large for higher temperatures. And compared to my previous call to glm, I haven't indicated the weight which accounts for the fact that each ratio Malfunction/Count corresponds to Count observations (if someone knows how to do this...). There must be something wrong.
+
+So let's provide the "raw" data to ggplot2.
+```{r}
+data_flat=data.frame()
+for(i in 1:nrow(data)) {
+  temperature = data[i,"Temperature"];
+  malfunction = data[i,"Malfunction"];
+  d = data.frame(Temperature=temperature,Malfunction=rep(0,times = data[i,"Count"]))
+  if(malfunction>0) {
+      d[1:malfunction, "Malfunction"]=1;
+  }
+  data_flat=rbind(data_flat,d)
+}
+dim(data_flat)
+str(data_flat)
+```
+
+Let's check whether I obtain the same regression or not:
+```{r}
+logistic_reg_flat = glm(data=data_flat, Malfunction ~ Temperature, family=binomial(link='logit'))
+summary(logistic_reg)
+```
+Perfect. The estimates and the standard errors are the same although the Residual deviance is difference since the distance is now measured with respect to each 0/1 measurement and not to ratios. Let's use plot the regression for *data_flat* along with the ratios (*data*).
+
+```{r, fig.height=3.3}
+ggplot(data=data_flat, aes(y=Malfunction, x=Temperature)) + 
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), fullrange=T) +
+  geom_point(data=data, aes(y=Malfunction/Count, x=Temperature),alpha=.2, size = 2, color="blue") + 
+  geom_point(alpha=.5, size = .5) + 
+  xlim(30,90) + ylim(0,1) + theme_bw()
+```
+
+This confidence interval seems much more reasonable (in accordance with the data) than the previous one. Let's check whether it corresponds to the prediction obtained when calling directly predict. Obtaining the prediction can be done directly or through the link function.
+
+Here is the "direct" (response) version I used in my very first plot:
+```{r}
+pred = predict(logistic_reg_flat,list(Temperature=30),type="response",se.fit = T)
+pred
+```
+The estimated Failure probability for 30° is thus $0.834$. However, the $se.fit$ value seems pretty hard to use as I can obviously not simply add $\pm 2 se.fit$ to $fit$ to compute a confidence interval.
+
+Here is the "link" version:
+```{r}
+pred_link = predict(logistic_reg_flat,list(Temperature=30),type="link",se.fit = T)
+pred_link
+logistic_reg$family$linkinv(pred_link$fit)
+```
+I recover $0.834$ for the estimated Failure probability at 30°. But now, going through the *linkinv* function, we can use $se.fit$:
+```{r}
+critval = 1.96
+logistic_reg$family$linkinv(c(pred_link$fit-critval*pred_link$se.fit, 
+                              pred_link$fit+critval*pred_link$se.fit))
+```
+The 95% confidence interval for our estimation is thus [0.163,0.992]. This is what ggplot2 just plotted me. This seems coherent.
+
+**I am now rather confident that I have managed to correctly compute and plot the uncertainty of my prediction.** Let's be honnest, it took me a while. My first attempts were plainly wrong (I didn't know how to do this so I trusted ggplot2, which I was misusing) and did not use the correct statistical method. I also feel confident now because this has been somehow validated by other colleagues but it will be interesting that you collect other kind of plots values that you obtained, that differ and that you would probably have kept if you didn't have a reference to compare to. Please provide us with as many versions as you can.
