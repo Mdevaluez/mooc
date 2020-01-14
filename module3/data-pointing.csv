@@ -1,4 +1,4 @@
-,"score","session","subject","group","group_c","session_c"
+score,session,subject,group,group_c,session_c
 1,2,"posttest",5,"control",-0.5,0.5
 2,3,"posttest",54,"perturbation",0.5,0.5
 3,6.5,"posttest",46,"perturbation",0.5,0.5
